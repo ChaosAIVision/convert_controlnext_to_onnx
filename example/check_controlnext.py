@@ -6,7 +6,6 @@ from safetensors.torch import load_file
 from repo_controlnext.controlnext_test.models.controlnet import ControlNetModel
 from repo_controlnext.controlnext_test.models.pipeline_controlnext import StableDiffusionControlNextPipeline
 #TEST CONTROLNEXT MODEL
-from diffusers import StableDiffusionControlNetPipeline
 # controlnext = ControlNeXtModel()
 # controlnext forward() missing 2 required positional arguments: 'sample' and 'timestep' 
 sample = torch.rand(1,3,64,64, dtype= torch.float32)
@@ -21,7 +20,6 @@ output return is a tensor with shape (1,320,4,4)
 
 # load model controlnext
 model = ControlNetModel()
-
 
 def load_safetensors(model, safetensors_path, strict=True, load_weight_increasement=False):
     if not load_weight_increasement:
