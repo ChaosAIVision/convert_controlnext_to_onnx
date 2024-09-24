@@ -1,4 +1,3 @@
-from repo_controlnext.controlnext_training.models.controlnext import ControlNeXtModel
 import torch
 from repo_ipadapter.ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlus 
 # from repo_controlnext.controlnext_training.pipeline.pipeline_controlnext import StableDiffusionControlNeXtPipeline
@@ -10,6 +9,7 @@ from repo_controlnext.controlnext_test.models.pipeline_controlnext import Stable
 # controlnext forward() missing 2 required positional arguments: 'sample' and 'timestep' 
 sample = torch.rand(1,3,64,64, dtype= torch.float32)
 timestep = torch.rand(1, dtype= torch.float32)
+from repo_controlnext.controlnext_test.models.unet import UNet2DConditionModel
 
 # result = controlnext.forward(sample, timestep)
 # print((result['output'].shape))
@@ -42,11 +42,15 @@ load_safetensors(model, '/home/chaos/Documents/Chaos_project/model/controlnext/c
 
 # for k, v in model.state_dict().items():
 #     print(k)
+unet = UNet2DConditionModel.from_pretrained('/home/chaos/Documents/Chaos_project/model/sd_model/stable_diffusion/unet')
+load_safetensors(unet, '/home/chaos/Documents/Chaos_project/model/controlnext/unet.safetensors', load_weight_increasement= True)
 
+# print(unet.forward())
 
 pipeline = StableDiffusionControlNextPipeline.from_single_file('/home/chaos/Documents/Chaos_project/model/sd_model/Realistic_Vision_V6.0_NV_B1.safetensors', 
                                                               use_safetensors=True
-                                                              ,controlnet=model)
+                                                              ,controlnet=model,
+                                                              unet = unet)
 
 load_safetensors(pipeline.unet, '/home/chaos/Documents/Chaos_project/model/controlnext/unet.safetensors', load_weight_increasement= True)
 
@@ -54,7 +58,25 @@ load_safetensors(pipeline.unet, '/home/chaos/Documents/Chaos_project/model/contr
 # Load ip_adapter 
 clip_weight =  '/home/chaos/Documents/Chaos_project/model/sd_model/clip_image/'
 ip_adapter_weight = '/home/chaos/Documents/Chaos_project/model/sd_model/ip-adapter-faceid-plus_sd15.bin'
-pipeline_ip = IPAdapterFaceIDPlus(pipeline,image_encoder_path = clip_weight, ip_ckpt = ip_adapter_weight, device = 'cuda' )
-proj_model = pipeline_ip.image_proj_model
-for k,v  in proj_model.state_dict().items():
-    print(k)
+# pipeline_ip = IPAdapterFaceIDPlus(pipeline,image_encoder_path = clip_weight, ip_ckpt = ip_adapter_weight, device = 'cuda' )
+# proj_model = pipeline_ip.image_proj_model
+# for k,v  in proj_model.state_dict().items():
+#     print(k)
+# dtype = torch.float32
+# sample =  torch.randn(1,4,64,64, dtype=dtype).to('cpu')
+# timestep = torch.tensor([5],dtype=dtype).to('cpu')
+# encoder_hidden_states = torch.randn(1,77,768,dtype=dtype).to('cpu')
+# out = (pipeline.unet.forward(sample, timestep, encoder_hidden_states, return_dict = False))
+# print(out[0].shape)
+
+# pipeline.save_pretrained(save_directory= '/home/chaos/Documents/Chaos_project/model/unet/')
+scale = torch.tensor([1])
+controlnext_hidden_states = torch.randn(1,1280,8,8)
+encoder_hidden_states = torch.randn(1,77,768)
+
+output_controlnext = {'out':controlnext_hidden_states, 'scale': scale}
+
+sample =  torch.randn(1,4,64,64)
+timestep = torch.tensor([5])
+encoder_hidden_states = torch.randn(1,77,768)
+print(pipeline.unet.forward(sample,timestep,encoder_hidden_states, mid_block_additional_residual= output_controlnext, return_dict = False)[0].shape)
