@@ -9,7 +9,8 @@ from repo_controlnext.controlnext_test.models.pipeline_controlnext import Stable
 # controlnext forward() missing 2 required positional arguments: 'sample' and 'timestep' 
 sample = torch.rand(1,3,64,64, dtype= torch.float32)
 timestep = torch.rand(1, dtype= torch.float32)
-from repo_controlnext.controlnext_test.models.unet import UNet2DConditionModel
+# from repo_controlnext.controlnext_test.models.unet import UNet2DConditionModel
+from repo_diffusers.src.diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 
 # result = controlnext.forward(sample, timestep)
 # print((result['output'].shape))

@@ -17,7 +17,7 @@ from repo_ipadapter.ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlus
 from repo_controlnext.controlnext_test.models.controlnet import ControlNetModel
 from repo_controlnext.controlnext_test.models.pipeline_controlnext import StableDiffusionControlNextPipeline
 from safetensors.torch import load_file
-from repo_controlnext.controlnext_test.models.unet import UNet2DConditionModel
+from repo_diffusers.src.diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 
 from transformers import CLIPVisionModelWithProjection
 
