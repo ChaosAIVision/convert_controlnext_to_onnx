@@ -277,7 +277,7 @@ def convert_models(
                  dynamic_axes={
                 "sample": {0: "2B", 2: "H", 3: "W"},
                 "encoder_hidden_states": {0: "B", 1:"2B", 2: '2B'},  # Tensor encoder hidden states
-                "controlnext_hidden_states": {0: "B", 2: "H", 3: "W"}
+                "controlnext_hidden_states": {0: "B"}
                  },
                 opset=opset,
                 verbose=True,
