@@ -18,7 +18,6 @@ from repo_controlnext.controlnext_test.models.controlnet import ControlNetModel
 from repo_controlnext.controlnext_test.models.pipeline_controlnext import StableDiffusionControlNextPipeline
 from safetensors.torch import load_file
 from repo_diffusers.src.diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
-
 from transformers import CLIPVisionModelWithProjection
 
 
@@ -104,12 +103,12 @@ class UNet2DConditionControlNetModel(torch.nn.Module):
         scale_controlnext:Union[torch.Tensor, float, int], 
 
     ):
-        output_controlnext = {'out':controlnext_hidden_states, 'scale': scale_controlnext}
+        # output_controlnext = {'out':controlnext_hidden_states, 'scale': scale_controlnext}
         noise_pred = self.unet(
             sample,
             timestep,
             encoder_hidden_states=encoder_hidden_states,
-            mid_block_additional_residual=output_controlnext,
+            mid_block_additional_residual=controlnext_hidden_states,
             return_dict=False,
         )[0]
         return noise_pred
@@ -132,12 +131,11 @@ def onnx_export(
     ordered_input_names,
     output_names,
     dynamic_axes,
-    opset:int ,
+    opset: int,
     use_external_data_format=False,
+    verbose=False,  # Thêm tham số verbose
 ):
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
-    # so we check the torch version for backwards compatibility
     with torch.inference_mode(), torch.autocast("cuda"):
         if is_torch_less_than_1_11:
             export(
@@ -151,6 +149,7 @@ def onnx_export(
                 use_external_data_format=use_external_data_format,
                 enable_onnx_checker=True,
                 opset_version=opset,
+                verbose=verbose,  # Thêm verbose ở đây
             )
         else:
             export(
@@ -162,6 +161,7 @@ def onnx_export(
                 dynamic_axes=dynamic_axes,
                 do_constant_folding=True,
                 opset_version=opset,
+                verbose=verbose,  # Thêm verbose ở đây
             )
 
 def load_safetensors(model, safetensors_path, strict=True, load_weight_increasement=False):
@@ -249,6 +249,7 @@ def convert_models(
     #UNET
 
     unet_controlnext = UNet2DConditionControlNetModel(pipeline_ip.pipe.unet)
+    unet_controlnext.eval()
     unet_in_channels = pipeline_ip.pipe.unet.in_channels
     unet_sample_size = pipeline_ip.pipe.unet.config.sample_size
     img_size = 8 * unet_sample_size
@@ -259,10 +260,10 @@ def convert_models(
 
     onnx_export(unet_controlnext,
          model_args=(
-                torch.randn(2, unet_in_channels, unet_sample_size, unet_sample_size).to(device=device, dtype=dtype),
+                torch.randn(1, unet_in_channels, unet_sample_size, unet_sample_size).to(device=device, dtype=dtype),
                 torch.tensor([1.0]).to(device=device, dtype=dtype),
-                torch.randn(2, num_tokens, text_hidden_size).to(device=device, dtype=dtype), 
-                torch.rand(2,1280, unet_sample_size//8, unet_sample_size//8).to(device=device, dtype=dtype),
+                torch.randn(1, num_tokens, text_hidden_size).to(device=device, dtype=dtype), 
+                torch.rand(1,1280, unet_sample_size//8, unet_sample_size//8).to(device=device, dtype=dtype),
                 torch.tensor([1.0]).to(device=device, dtype=dtype),
                 ),
                 output_path=unet_path,
@@ -279,6 +280,7 @@ def convert_models(
                 "controlnext_hidden_states": {0: "B", 2: "H", 3: "W"}
                  },
                 opset=opset,
+                verbose=True,
                 use_external_data_format=True,  # UNet is > 2GB, so the weights need to be split
 
 )
