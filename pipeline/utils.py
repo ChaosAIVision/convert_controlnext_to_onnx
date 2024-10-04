@@ -29,6 +29,10 @@ class OnnxExecute:
 
     def create_onnx_session(self):
         # Create the ONNX inference session based on the specified device
+        optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        session_options = ort.SessionOptions()
+        session_options.graph_optimization_level = optimization_level
+
         providers = ['CUDAExecutionProvider'] if self.device == 'cuda' else ['CPUExecutionProvider']
         self.session = ort.InferenceSession(self.model_path, providers=providers)
 
@@ -69,5 +73,5 @@ class OnnxExecute:
     
 
 
-execute = OnnxExecute('/home/chaos/Documents/Chaos_project/model/sd_controlnext_fp16_onnx/unet_optimize/model.onnx')
-execute.get_metadata_onnx()
+# execute = OnnxExecute('/home/chaos/Documents/Chaos_project/model/sd_controlnext_fp16_onnx/unet_optimize/model.onnx')
+# execute.get_metadata_onnx()

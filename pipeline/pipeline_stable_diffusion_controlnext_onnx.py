@@ -232,12 +232,14 @@ class StableDiffusionControlNextOnnx:
 
         ip_adpater_embeding = np.reshape(ip_adpater_embeding, (bs_embed * num_images_per_prompt, seq_len, -1))
 
-        prompt_embeds = np.concatenate((prompt_embeds,ip_adpater_embeding), axis= 1)
+        # prompt_embeds = np.concatenate((prompt_embeds,ip_adpater_embeding), axis= 1)
 
         progress_bar = tqdm(self.scheduler.timesteps)
 
         #init Unet execute
         unet_execute = OnnxExecute(self.model_path.unet_optime)
+        array = np.zeros((1, 1280, 8, 8), dtype=np.float16)
+
         for i, t in enumerate(progress_bar):
             # latent_model_input = np.concatenate([latents] * 2) if do_classifier_free_guidance else latents
             latent_model_input = latents
@@ -248,7 +250,9 @@ class StableDiffusionControlNextOnnx:
             controlnext_embed = self.encoder_controlnext(image_controlnext, timesteps)
      
 
-            inputs_unet = {'sample': latent_model_input.astype(np.float16), 'timesteps': timesteps, 'encoder_hidden_states':prompt_embeds.astype(np.float16), 'controlnext_hidden_states': controlnext_embed  }
+            # inputs_unet = {'sample': latent_model_input.astype(np.float16), 'timesteps': timesteps.astype(np.float16), 'encoder_hidden_states':prompt_embeds.astype(np.float16), 'controlnext_hidden_states': array.astype(np.float16)}
+            inputs_unet = {'sample': latent_model_input.astype(np.float16), 'timestep': timesteps.astype(np.float16), 'encoder_hidden_states':prompt_embeds.astype(np.float16)}
+
             noise_pred = unet_execute(inputs_unet, device= 'cuda')
             noise_pred = noise_pred[0]
 
@@ -270,23 +274,22 @@ class StableDiffusionControlNextOnnx:
 
         # del unet_execute
         latents = 1 / 0.18215 * latents
-        print(latents)
-#         vae_decoder_execute = OnnxExecute(self.model_path.vae_decoder)
-#         images = [
-#     vae_decoder_execute(
-#         inputs={'latent_sample': latents[i:i+1]}, device='cuda'
-#     )[0]
-#     for i in range(latents.shape[0])
-# ]
+        vae_decoder_execute = OnnxExecute(self.model_path.vae_decoder)
+        images = [
+    vae_decoder_execute(
+        inputs={'latent_sample': latents[i:i+1]}, device='cpu'
+    )[0]
+    for i in range(latents.shape[0])
+]
 
-#         image = np.concatenate(images)
-#         image = np.clip(image / 2 + 0.5, 0, 1)
-#         image = image.transpose((0,2,3,1))
-#         image = image * 255
-#         image = image.astype(np.uint8)
-#         image = image[0] 
-#         image = Image.fromarray(image)
-#         image.show()
+        image = np.concatenate(images)
+        image = np.clip(image / 2 + 0.5, 0, 1)
+        image = image.transpose((0,2,3,1))
+        image = image * 255
+        image = image.astype(np.uint8)
+        image = image[0] 
+        image = Image.fromarray(image)
+        image.show()
 
 
 
@@ -327,4 +330,4 @@ promt = 'a beautiful girl , good image'
 negative_promt =  None
 # out = pipe.encoder_prompt(prompt= promt, negative_prompt= negative_promt, num_images_per_prompt= 1, do_classifier_free_guidance= False)
 # print(out.shape)
-pipe(prompt= promt, image_controlnext= pose, image_ipadapter= face, num_inference_steps= 1, negative_prompt= negative_promt )
+pipe(prompt= promt, image_controlnext= pose, image_ipadapter= face, num_inference_steps= 20, negative_prompt= negative_promt )

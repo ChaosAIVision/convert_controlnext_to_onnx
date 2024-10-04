@@ -109,6 +109,7 @@ class UNet2DConditionControlNetModel(torch.nn.Module):
             timestep,
             encoder_hidden_states=encoder_hidden_states,
             mid_block_additional_residual=controlnext_hidden_states,
+            scale_controlnext= scale_controlnext,
             return_dict=False,
         )[0]
         return noise_pred
@@ -195,13 +196,16 @@ def convert_models(
     lora_weight_path:str =None ,
     use_safetensors:bool= False
 ):
-    dtype = torch.float16 if fp16 else torch.float32
-    if fp16 and torch.cuda.is_available():
-        device = "cuda"
-    elif fp16 and not torch.cuda.is_available():
-        raise ValueError("`float16` model export is only supported on GPUs with CUDA")
-    else:
-        device = "cpu"
+    dtype =  torch.float32
+
+    # dtype = torch.float16 if fp16 else torch.float32
+    # if fp16 and torch.cuda.is_available():
+    #     device = "cuda"
+    # elif fp16 and not torch.cuda.is_available():
+    #     raise ValueError("`float16` model export is only supported on GPUs with CUDA")
+    # else:
+    #     device = "cpu"
+    device = 'cpu'
 
     #init controlnext 
     controlnext = ControlNetModel() # Hmm this is some stupid of author of the repo, i don't know why it's named like that
@@ -226,7 +230,7 @@ def convert_models(
         
 
     # Load ip_adapter 
-    pipeline_ip = IPAdapterFaceIDPlus(pipeline,image_encoder_path = image_model_path, ip_ckpt = ip_adapter_weight_path, device = 'cuda' )
+    # pipeline_ip = IPAdapterFaceIDPlus(pipeline,image_encoder_path = image_model_path, ip_ckpt = ip_adapter_weight_path, device = 'cuda' )
 
     # if lora_weight_path is not None:
     #     pipeline.load_lora_weights(lora_weight_path)
@@ -248,10 +252,10 @@ def convert_models(
 
     #UNET
 
-    unet_controlnext = UNet2DConditionControlNetModel(pipeline_ip.pipe.unet)
-    unet_controlnext.eval()
-    unet_in_channels = pipeline_ip.pipe.unet.in_channels
-    unet_sample_size = pipeline_ip.pipe.unet.config.sample_size
+    unet_controlnext = UNet2DConditionControlNetModel(pipeline.unet).to('cpu')
+    # unet_controlnext.to(device)
+    unet_in_channels = pipeline.unet.in_channels
+    unet_sample_size = pipeline.unet.config.sample_size
     img_size = 8 * unet_sample_size
     output_path = Path(output_path)
 
@@ -263,7 +267,7 @@ def convert_models(
                 torch.randn(1, unet_in_channels, unet_sample_size, unet_sample_size).to(device=device, dtype=dtype),
                 torch.tensor([1.0]).to(device=device, dtype=dtype),
                 torch.randn(1, num_tokens, text_hidden_size).to(device=device, dtype=dtype), 
-                torch.rand(1,1280, unet_sample_size//8, unet_sample_size//8).to(device=device, dtype=dtype),
+                torch.rand(1,1280, unet_sample_size, unet_sample_size).to(device=device, dtype=dtype),
                 torch.tensor([1.0]).to(device=device, dtype=dtype),
                 ),
                 output_path=unet_path,
@@ -383,11 +387,11 @@ if __name__ == "__main__":
         model_path= '/home/chaos/Documents/Chaos_project/model/sd_model/Realistic_Vision_V6.0_NV_B1.safetensors',
         controlnext_path='/home/chaos/Documents/Chaos_project/model/controlnext/controlnet.safetensors',
         load_weight_increasement='/home/chaos/Documents/Chaos_project/model/controlnext/unet.safetensors',
-        image_model_path='/home/chaos/Documents/Chaos_project/model/sd_model/clip_image',
+        image_model_path='/home/chaos/Documents/Chaos_project/model/sd_model/stable_diffusion/clip_image/',
         ip_adapter_weight_path='/home/chaos/Documents/Chaos_project/model/sd_model/ip-adapter-faceid-plus_sd15.bin',
-        output_path='/home/chaos/Documents/Chaos_project/output_onnx/',
+        output_path='/home/chaos/Documents/Chaos_project/model/sd_controlnext_fp16_onnx/unet_optimize/',
         opset=16,
-        fp16=True,
+        # fp16=True,
         lora_weight_path='/home/chaos/Documents/Chaos_project/model/sd_model/ip-adapter-faceid-plus_sd15_lora.safetensors',
         use_safetensors=True,
         unet_folder_path= '/home/chaos/Documents/Chaos_project/model/sd_model/stable_diffusion/unet/'

@@ -46,7 +46,7 @@ load_safetensors(model, '/home/chaos/Documents/Chaos_project/model/controlnext/c
 # for k, v in model.state_dict().items():
 #     print(k)
 unet = UNet2DConditionModel.from_pretrained('/home/chaos/Documents/Chaos_project/model/sd_model/stable_diffusion/unet')
-load_safetensors(unet, '/home/chaos/Documents/Chaos_project/model/controlnext/unet.safetensors', load_weight_increasement= True)
+# load_safetensors(unet, '/home/chaos/Documents/Chaos_project/model/controlnext/unet.safetensors', load_weight_increasement= True)
 
 # print(unet.forward())
 
@@ -55,7 +55,7 @@ pipeline = StableDiffusionControlNextPipeline.from_single_file('/home/chaos/Docu
                                                               ,controlnet=model,
                                                               unet = unet)
 
-load_safetensors(pipeline.unet, '/home/chaos/Documents/Chaos_project/model/controlnext/unet.safetensors', load_weight_increasement= True)
+# load_safetensors(pipeline.unet, '/home/chaos/Documents/Chaos_project/model/controlnext/unet.safetensors', load_weight_increasement= True)
 
 
 # Load ip_adapter 

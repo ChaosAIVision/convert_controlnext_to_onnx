@@ -1042,6 +1042,7 @@ class UNet2DConditionModel(
         sample: torch.Tensor,
         timestep: Union[torch.Tensor, float, int],
         encoder_hidden_states: torch.Tensor,
+        scale_controlnext: torch.Tensor, 
         class_labels: Optional[torch.Tensor] = None,
         timestep_cond: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
@@ -1261,14 +1262,14 @@ class UNet2DConditionModel(
                 and sample.shape == down_intrablock_additional_residuals[0].shape
             ):
                 sample += down_intrablock_additional_residuals.pop(0)
-        # scale = mid_block_additional_residual['scale']
+        scale = scale_controlnext
         mid_block_additional_residual = mid_block_additional_residual
         mid_block_additional_residual=nn.functional.adaptive_avg_pool2d(mid_block_additional_residual,(8,8))
         mid_block_additional_residual = mid_block_additional_residual.to(sample)                
         mean_latents, std_latents = torch.mean(sample, dim=(1, 2, 3), keepdim=True), torch.std(sample, dim=(1, 2, 3), keepdim=True)
         mean_control, std_control = torch.mean(mid_block_additional_residual, dim=(1, 2, 3), keepdim=True), torch.std(mid_block_additional_residual, dim=(1, 2, 3), keepdim=True)
         mid_block_additional_residual = (mid_block_additional_residual - mean_control) * (std_latents / (std_control + 1e-12)) + mean_latents
-        sample = sample + mid_block_additional_residual 
+        sample = sample + mid_block_additional_residual * scale
   
 
 
