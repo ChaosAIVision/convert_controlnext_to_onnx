@@ -15,11 +15,14 @@ from typing import Union, Optional, Tuple
 from diffusers import AutoPipelineForText2Image
 from repo_ipadapter.ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlus, IPAdapterFaceID
 from repo_ipadapter.ip_adapter.ip_adapter import IPAdapter
+from repo_ipadapter.ip_adapter.ip_adapter_original import IPAdapterOriginal
 from repo_controlnext.controlnext_test.models.controlnet import ControlNetModel
 from repo_controlnext.controlnext_test.models.pipeline_controlnext import StableDiffusionControlNextPipeline
 from safetensors.torch import load_file
-from repo_diffusers.src.diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
+# from repo_diffusers.src.diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
+from unet_condition.unet import UNet2DConditionModel
 from transformers import CLIPVisionModelWithProjection
+
 
 
 
@@ -86,8 +89,8 @@ class ImageProjModel(torch.nn.Module):
         super().__init__()
         self.proj_model = proj_model
 
-    def forward(self, image_embedding: torch.tensor, clip_embedding: torch.tensor) -> torch.tensor:
-        output_proj = self.proj_model(image_embedding, clip_embedding)
+    def forward(self, clip_embedding: torch.tensor) -> torch.tensor:
+        output_proj = self.proj_model(clip_embedding)
         return output_proj
 
 class UNet2DConditionControlNetModel(torch.nn.Module):
@@ -203,7 +206,7 @@ def convert_models(
     # if fp16 and torch.cuda.is_available():
     #     device = "cuda"
     # elif fp16 and not torch.cuda.is_available():
-    #     raise ValueError("`float16` model export is only supported on GPUs with CUDA")
+    #     raise ValueError("float16 model export is only supported on GPUs with CUDA")
     # else:
     #     device = "cpu"
     device = 'cpu'
@@ -214,24 +217,29 @@ def convert_models(
     load_safetensors(controlnext,controlnext_path)
 
     #init unet 
-    unet = UNet2DConditionModel.from_pretrained(unet_folder_path)
-    load_safetensors(unet,load_weight_increasement , load_weight_increasement= True)
+    unet =UNet2DConditionModel.from_pretrained(
+        "SG161222/Realistic_Vision_V5.1_noVAE", 
+        subfolder="unet", 
+    )
+
+    load_safetensors(unet, '/home/tiennv/chaos/weight_folder/unet.safetensors', strict=False, load_weight_increasement=False)
+
 
 
     #create pipeline
-    if use_safetensors is True:
-        pipeline = StableDiffusionControlNextPipeline.from_single_file(model_path, 
-                                                                use_safetensors=True
-                                                                ,controlnet=controlnext,
-                                                                unet = unet)
-    else:
-        pipeline = StableDiffusionControlNextPipeline.from_pretrained(model_path
-                                                                ,controlnet=controlnext,
-                                                                unet = unet)
+    # if use_safetensors is True:
+    #     pipeline = StableDiffusionControlNextPipeline.from_single_file(model_path, 
+    #                                                             use_safetensors=True
+    #                                                             ,controlnet=controlnext,
+    #                                                             unet = unet)
+    # else:
+    #     pipeline = StableDiffusionControlNextPipeline.from_pretrained(model_path
+    #                                                             ,controlnet=controlnext,
+    #                                                             unet = unet)
         
 
     # Load ip_adapter 
-    pipeline_ip = IPAdapter(pipeline,image_encoder_path = image_model_path, ip_ckpt = ip_adapter_weight_path, device = 'cuda' )
+    # pipeline_ip = IPAdapterOriginal(unet,image_encoder_path = image_model_path, ip_ckpt = ip_adapter_weight_path, device = 'cuda' )
 
     # if lora_weight_path is not None:
     #     pipeline.load_lora_weights(lora_weight_path)
@@ -241,49 +249,53 @@ def convert_models(
 
 
     # # TEXT ENCODER
-    num_tokens = pipeline.text_encoder.config.max_position_embeddings
-    text_hidden_size = pipeline.text_encoder.config.hidden_size
-    text_input = pipeline.tokenizer(
-        "A sample prompt",
-        padding="max_length",
-        max_length=pipeline.tokenizer.model_max_length,
-        truncation=True,
-        return_tensors="pt",
-    )
+    # num_tokens = pipeline.text_encoder.config.max_position_embeddings
+    # text_hidden_size = pipeline.text_encoder.config.hidden_size
+    # text_input = pipeline.tokenizer(
+    #     "A sample prompt",
+    #     padding="max_length",
+    #     max_length=pipeline.tokenizer.model_max_length,
+    #     truncation=True,
+    #     return_tensors="pt",
+    # )
 
     #UNET
+     # pipeline  for convert only unet
 
-    unet_controlnext = UNet2DConditionControlNetModel(pipeline.unet).to('cpu')
+    ip_model = IPAdapter(unet, image_encoder_path=image_model_path,ip_ckpt= ip_adapter_weight_path,device= device, num_tokens=4)
+    unet = ip_model.unet
+
+
     # unet_controlnext.to(device)
-    unet_in_channels = pipeline.unet.in_channels
-    unet_sample_size = pipeline.unet.config.sample_size
+    unet_in_channels = unet.in_channels
+    unet_sample_size = unet.config.sample_size
     img_size = 8 * unet_sample_size
     output_path = Path(output_path)
 
     unet_path = output_path / "unet" / "model.onnx"
     unet_optimize = output_path / "unet_optimize" / "model.onnx"
 
-    onnx_export(unet_controlnext,
+    onnx_export(unet,
          model_args=(
                 torch.randn(1, unet_in_channels, unet_sample_size, unet_sample_size).to(device=device, dtype=dtype),
                 torch.tensor([1.0]).to(device=device, dtype=dtype),
-                torch.randn(1, num_tokens, text_hidden_size).to(device=device, dtype=dtype), 
+                torch.randn(1, 81, 768).to(device=device, dtype=dtype), 
                 torch.rand(1,1280, unet_sample_size, unet_sample_size).to(device=device, dtype=dtype),
-                torch.tensor([1.0]).to(device=device, dtype=dtype),
+                torch.tensor([2.5]).to(device=device, dtype=dtype),
                 ),
                 output_path=unet_path,
                 ordered_input_names=[
                     "sample",
-                    "timesteps",
-                    "encoder_hidden_states",
-                    "controlnext_hidden_states",
-                    "scale_controlnext"],
-                output_names=["noise_pred"],
+                    "timestep",
+                    "encoder_hidden_state",
+                    "mid_block_additional_residual",
+                    "mid_block_additional_residual_scale"],
+                output_names=["predict_noise"],
                  dynamic_axes={
                 "sample": {0: "2B", 2: "H", 3: "W"},
-                "encoder_hidden_states": {0: "B", 1:"2B", 2: '2B'},  # Tensor encoder hidden states
-                "controlnext_hidden_states": {0: "B"}
-                 },
+                "encoder_hidden_state": {0: "B", 1:"2B", 2: '2B'},  # Tensor encoder hidden states
+                "mid_block_additional_residual": {0: "B"},
+                "predict_noise":  {0: 'b'} },
                 opset=opset,
                 verbose=True,
                 use_external_data_format=True,  # UNet is > 2GB, so the weights need to be split
@@ -300,15 +312,16 @@ def convert_models(
 
     )
 
-    #convert proj model to onnx
-    proj = (pipeline_ip.image_proj_model)
+# #     #convert proj model to onnx
+    device = 'cuda'
+    proj = (ip_model.image_proj_model)
 
     image_proj_model = ImageProjModel(proj)
     proj_path = output_path / "proj" / "model.onnx"
 
 
     onnx_export(image_proj_model,
-                model_args=(torch.rand(1,512).to(device=device, dtype=dtype),
+                model_args=(
                             torch.rand(1,1024).to(device= device, dtype= dtype)),
                 output_path = proj_path,
                 ordered_input_names=[
@@ -316,7 +329,6 @@ def convert_models(
                     'clip_embedding'],
                 output_names= ['image_encoder'],
                 dynamic_axes={
-                        'image_embedding': {0: "batch_size", 1: "height"},
                         'clip_embedding': {0: "batch_size", 1: "feature_dim"},
                         'image_encoder': {0: 'batch_size', 1: 'num_token', 2: 'sequences_length'}
 
@@ -380,19 +392,16 @@ def convert_models(
             convert_attribute=False,
         )
     
-if __name__ == "__main__":
+if __name__ == "_main_":
     convert_models(
-        model_path= '/home/chaos/Documents/Chaos_project/model/sd_model/Realistic_Vision_V6.0_NV_B1.safetensors',
-        controlnext_path='/home/chaos/Documents/Chaos_project/model/controlnext/controlnet.safetensors',
-        load_weight_increasement='/home/chaos/Documents/Chaos_project/model/controlnext/unet.safetensors',
-        image_model_path='/home/chaos/Documents/Chaos_project/model/sd_model/stable_diffusion/clip_image/',
-        ip_adapter_weight_path='/home/chaos/Documents/Chaos_project/model/sd_model/ip-adapter-faceid-plus_sd15.bin',
-        output_path='/home/chaos/Documents/Chaos_project/model/sd_controlnext_fp16_onnx/unet_optimize/',
+        model_path= '/home/tiennv/chaos/weight_folder/Realistic_Vision_V5.1.safetensors',
+        controlnext_path='/home/tiennv/chaos/weight_folder/controlnet.safetensors',
+        load_weight_increasement='/home/tiennv/chaos/weight_folder/unet.safetensors',
+        image_model_path='/home/tiennv/chaos/weight_folder/clip_model',
+        ip_adapter_weight_path='/home/tiennv/chaos/weight_folder/ip-adapter_sd15.bin',
+        output_path='/home/tiennv/chaos/trash',
         opset=16,
         # fp16=True,
         lora_weight_path='/home/chaos/Documents/Chaos_project/model/sd_model/ip-adapter-faceid-plus_sd15_lora.safetensors',
         use_safetensors=True,
-        unet_folder_path= '/home/chaos/Documents/Chaos_project/model/sd_model/stable_diffusion/unet/'
-
-)
-
+        unet_folder_path= '/home/tiennv/chaos/weight_folder/unet')
