@@ -15,12 +15,11 @@ from typing import Union, Optional, Tuple
 from diffusers import AutoPipelineForText2Image
 from repo_ipadapter.ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlus, IPAdapterFaceID
 from repo_ipadapter.ip_adapter.ip_adapter import IPAdapter
-from repo_ipadapter.ip_adapter.ip_adapter_original import IPAdapterOriginal
 from repo_controlnext.controlnext_test.models.controlnet import ControlNetModel
 from repo_controlnext.controlnext_test.models.pipeline_controlnext import StableDiffusionControlNextPipeline
 from safetensors.torch import load_file
 # from repo_diffusers.src.diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
-from unet_condition.unet import UNet2DConditionModel
+# from unet_condition.unet import UNet2DConditionModel
 from transformers import CLIPVisionModelWithProjection
 
 
