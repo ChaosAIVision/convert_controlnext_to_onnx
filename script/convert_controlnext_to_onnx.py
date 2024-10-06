@@ -13,7 +13,7 @@ from torch.onnx import export
 
 from typing import Union, Optional, Tuple
 from diffusers import AutoPipelineForText2Image
-from repo_ipadapter.ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlus
+from repo_ipadapter.ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlus, IPAdapterFaceID
 from repo_controlnext.controlnext_test.models.controlnet import ControlNetModel
 from repo_controlnext.controlnext_test.models.pipeline_controlnext import StableDiffusionControlNextPipeline
 from safetensors.torch import load_file
@@ -123,7 +123,7 @@ class ControlNextModel(torch.nn.Module):
     
     def forward(self,sample: torch.FloatTensor, timesteps:Union[torch.Tensor, float, int]):
         output_controlnext = self.controlnext(sample, timesteps)
-        return output_controlnext['out'] # just  get image encoder_hidden_states of cotnrolnext
+        return output_controlnext['out'], output_controlnext['scale'] # just  get image encoder_hidden_states of cotnrolnext
         
 def onnx_export(
     model,
@@ -230,7 +230,7 @@ def convert_models(
         
 
     # Load ip_adapter 
-    # pipeline_ip = IPAdapterFaceIDPlus(pipeline,image_encoder_path = image_model_path, ip_ckpt = ip_adapter_weight_path, device = 'cuda' )
+    pipeline_ip = IPAdapterFaceID(pipeline,image_encoder_path = image_model_path, ip_ckpt = ip_adapter_weight_path, device = 'cuda' )
 
     # if lora_weight_path is not None:
     #     pipeline.load_lora_weights(lora_weight_path)
@@ -299,88 +299,85 @@ def convert_models(
 
     )
 
-    # #convert proj model to onnx
-    # proj = (pipeline_ip.image_proj_model)
+    #convert proj model to onnx
+    proj = (pipeline_ip.image_proj_model)
 
-    # image_proj_model = ImageProjModel(proj)
-    # proj_path = output_path / "proj" / "model.onnx"
+    image_proj_model = ImageProjModel(proj)
+    proj_path = output_path / "proj" / "model.onnx"
 
 
-    # onnx_export(image_proj_model,
-    #             model_args=(torch.rand(1,512).to(device=device, dtype=dtype),
-    #                         torch.rand(1,77,1280).to(device= device, dtype= dtype)),
-    #             output_path = proj_path,
-    #             ordered_input_names=[
-    #                 'image_embedding',
-    #                 'clip_embedding'],
-    #             output_names= ['image_encoder'],
-    #             dynamic_axes={
-    #                     'image_embedding': {0: "batch_size", 1: "height"},
-    #                     'clip_embedding': {0: "batch_size", 1: "seq_length", 2: "feature_dim"},
-    #                     'image_encoder': {0: 'batch_size', 1: 'channels', 2: 'feature_dim'}
+    onnx_export(image_proj_model,
+                model_args=(torch.rand(1,512).to(device=device, dtype=dtype),
+                            torch.rand(1,1024).to(device= device, dtype= dtype)),
+                output_path = proj_path,
+                ordered_input_names=[
+                    'image_embedding',
+                    'clip_embedding'],
+                output_names= ['image_encoder'],
+                dynamic_axes={
+                        'image_embedding': {0: "batch_size", 1: "height"},
+                        'clip_embedding': {0: "batch_size", 1: "feature_dim"},
+                        'image_encoder': {0: 'batch_size', 1: 'num_token', 2: 'sequences_length'}
 
-    #                 } ,
-    #             opset=opset,
-    #             use_external_data_format=True,              
-    #            )
+                    } ,
+                opset=opset,
+                use_external_data_format=True,              
+               )
     
-    # proj_model_path = str(proj_path.absolute().as_posix())
-    # proj_dir = os.path.dirname(proj_model_path)
-    #  # optimize onnx
-    # shape_inference.infer_shapes_path(proj_model_path, proj_model_path)
-    # proj_opt_graph = optimize(onnx.load(proj_model_path), name="proj", verbose=True)
-    # # clean up existing tensor files
-    # shutil.rmtree(proj_dir)
-    # os.mkdir(proj_dir)
-    # # collate external tensor files into one
-    # onnx.save_model(
-    #         proj_opt_graph,
-    #         proj_model_path,
-    #         save_as_external_data=True,
-    #         all_tensors_to_one_file=True,
-    #         location="weights.pb",
-    #         convert_attribute=False,
-    #     )
+    proj_model_path = str(proj_path.absolute().as_posix())
+    proj_dir = os.path.dirname(proj_model_path)
+     # optimize onnx
+    shape_inference.infer_shapes_path(proj_model_path, proj_model_path)
+    proj_opt_graph = optimize(onnx.load(proj_model_path), name="proj", verbose=True)
+    # clean up existing tensor files
+    shutil.rmtree(proj_dir)
+    os.mkdir(proj_dir)
+    # collate external tensor files into one
+    onnx.save_model(
+            proj_opt_graph,
+            proj_model_path,
+            save_as_external_data=True,
+            all_tensors_to_one_file=True,
+            location="weights.pb",
+            convert_attribute=False,
+        )
     
+    #convert controlnext
+    controlnext_path = output_path / "controlnext" / "model.onnx"
 
-    
-
-    # #convert controlnext
-    # controlnext_path = output_path / "controlnext" / "model.onnx"
-
-    # onnx_export(controlnext,
-    #             model_args=(torch.rand(2,3,unet_sample_size, unet_sample_size).to(device=device, dtype=dtype),
-    #                         torch.tensor([1.0]).to(device=device, dtype=dtype),),
-    #             output_path= controlnext_path,
-    #             ordered_input_names=[
-    #                 'sample',
-    #                 'timesteps'],
-    #             output_names=["controlnext_hidden_states"],
-    #             dynamic_axes={
-    #                 'sample': {0: "B", 2: "H", 3: "W" }
-    #             },
-    #             opset= opset,
-    #             use_external_data_format= True,            
-    #                   )
+    onnx_export(controlnext,
+                model_args=(torch.rand(2,3,unet_sample_size, unet_sample_size).to(device=device, dtype=dtype),
+                            torch.tensor([1.0]).to(device=device, dtype=dtype),),
+                output_path= controlnext_path,
+                ordered_input_names=[
+                    'sample',
+                    'timesteps'],
+                output_names=["controlnext_hidden_states", 'scale'],
+                dynamic_axes={
+                    'sample': {0: "B", 2: "H", 3: "W" }
+                },
+                opset= opset,
+                use_external_data_format= True,            
+                      )
 
 
-    # controlnext_model_path = str(controlnext_path.absolute().as_posix())
-    # controlnext_dir = os.path.dirname(controlnext_model_path)
-    #  # optimize onnx
-    # shape_inference.infer_shapes_path(controlnext_model_path, controlnext_model_path)
-    # controlnext_opt_graph = optimize(onnx.load(controlnext_model_path), name="proj", verbose=True)
-    # # clean up existing tensor files
-    # shutil.rmtree(controlnext_dir)
-    # os.mkdir(controlnext_dir)
-    # # collate external tensor files into one
-    # onnx.save_model(
-    #         controlnext_opt_graph,
-    #         controlnext_model_path,
-    #         save_as_external_data=True,
-    #         all_tensors_to_one_file=True,
-    #         location="weights.pb",
-    #         convert_attribute=False,
-    #     )
+    controlnext_model_path = str(controlnext_path.absolute().as_posix())
+    controlnext_dir = os.path.dirname(controlnext_model_path)
+     # optimize onnx
+    shape_inference.infer_shapes_path(controlnext_model_path, controlnext_model_path)
+    controlnext_opt_graph = optimize(onnx.load(controlnext_model_path), name="proj", verbose=True)
+    # clean up existing tensor files
+    shutil.rmtree(controlnext_dir)
+    os.mkdir(controlnext_dir)
+    # collate external tensor files into one
+    onnx.save_model(
+            controlnext_opt_graph,
+            controlnext_model_path,
+            save_as_external_data=True,
+            all_tensors_to_one_file=True,
+            location="weights.pb",
+            convert_attribute=False,
+        )
     
 if __name__ == "__main__":
     convert_models(

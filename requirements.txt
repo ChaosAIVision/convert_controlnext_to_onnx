@@ -1,0 +1,11 @@
+transformers
+onnx==1.15.0
+onnxruntime==1.17.0
+onnxruntime-gpu==1.17.0
+diffusers==0.28.0
+onnx_graphsurgeon
+polygraphy
+peft
+colored
+torch
+torchvision
