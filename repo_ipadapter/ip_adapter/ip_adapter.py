@@ -8,6 +8,8 @@ from PIL import Image
 from safetensors import safe_open
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
+from huggingface_hub import hf_hub_download
+
 from .utils import is_torch2_available, get_generator
 
 if is_torch2_available():
@@ -64,17 +66,20 @@ class MLPProjModel(torch.nn.Module):
 
 
 class IPAdapter:
-    def __init__(self, sd_pipe, image_encoder_path, ip_ckpt, device, num_tokens=4):
+    def __init__(self, #sd_pipe, 
+                 unet, 
+                 image_encoder_path, ip_ckpt, device, num_tokens=4):
         self.device = device
         self.image_encoder_path = image_encoder_path
         self.ip_ckpt = ip_ckpt
         self.num_tokens = num_tokens
+        self.unet = unet
 
-        self.pipe = sd_pipe.to(self.device)
+        #self.pipe = sd_pipe.to(self.device)
         self.set_ip_adapter()
 
         # load image encoder
-        self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(self.image_encoder_path).to(
+        self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(self.image_encoder_path, subfolder="models/image_encoder").to(
             self.device, dtype=torch.float16
         )
         self.clip_image_processor = CLIPImageProcessor()
@@ -85,14 +90,14 @@ class IPAdapter:
 
     def init_proj(self):
         image_proj_model = ImageProjModel(
-            cross_attention_dim=self.pipe.unet.config.cross_attention_dim,
+            cross_attention_dim=self.unet.config.cross_attention_dim,
             clip_embeddings_dim=self.image_encoder.config.projection_dim,
             clip_extra_context_tokens=self.num_tokens,
         ).to(self.device, dtype=torch.float16)
         return image_proj_model
 
     def set_ip_adapter(self):
-        unet = self.pipe.unet
+        unet = self.unet
         attn_procs = {}
         for name in unet.attn_processors.keys():
             cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
@@ -112,28 +117,37 @@ class IPAdapter:
                     cross_attention_dim=cross_attention_dim,
                     scale=1.0,
                     num_tokens=self.num_tokens,
-                ).to(self.device, dtype=torch.float16)
+                ).to(self.device, dtype=torch.float32)
         unet.set_attn_processor(attn_procs)
-        if hasattr(self.pipe, "controlnet"):
+                
+        '''if hasattr(self.pipe, "controlnet"):
             if isinstance(self.pipe.controlnet, MultiControlNetModel):
                 for controlnet in self.pipe.controlnet.nets:
                     controlnet.set_attn_processor(CNAttnProcessor(num_tokens=self.num_tokens))
             else:
                 self.pipe.controlnet.set_attn_processor(CNAttnProcessor(num_tokens=self.num_tokens))
+        #return unet'''
 
     def load_ip_adapter(self):
-        if os.path.splitext(self.ip_ckpt)[-1] == ".safetensors":
-            state_dict = {"image_proj": {}, "ip_adapter": {}}
-            with safe_open(self.ip_ckpt, framework="pt", device="cpu") as f:
-                for key in f.keys():
-                    if key.startswith("image_proj."):
-                        state_dict["image_proj"][key.replace("image_proj.", "")] = f.get_tensor(key)
-                    elif key.startswith("ip_adapter."):
-                        state_dict["ip_adapter"][key.replace("ip_adapter.", "")] = f.get_tensor(key)
+        if os.path.isfile(self.ip_ckpt) or os.path.isdir(self.ip_ckpt):
+            # Load từ đường dẫn cục bộ
+            if os.path.splitext(self.ip_ckpt)[-1] == ".safetensors":
+                state_dict = {"image_proj": {}, "ip_adapter": {}}
+                with safe_open(self.ip_ckpt, framework="pt", device="cpu") as f:
+                    for key in f.keys():
+                        if key.startswith("image_proj."):
+                            state_dict["image_proj"][key.replace("image_proj.", "")] = f.get_tenssor(key)
+                        elif key.startswith("ip_adapter."):
+                            state_dict["ip_adapter"][key.replace("ip_adapter.", "")] = f.get_tensor(key)
+            else:
+                state_dict = torch.load(self.ip_ckpt, map_location="cpu")
         else:
-            state_dict = torch.load(self.ip_ckpt, map_location="cpu")
+            # Tải mô hình từ Hugging Face Hub
+            model_filename = hf_hub_download(repo_id=self.ip_ckpt, filename="models/ip-adapter_sd15.bin")
+            state_dict = torch.load(model_filename, map_location="cpu")
+
         self.image_proj_model.load_state_dict(state_dict["image_proj"])
-        ip_layers = torch.nn.ModuleList(self.pipe.unet.attn_processors.values())
+        ip_layers = torch.nn.ModuleList(self.unet.attn_processors.values())
         ip_layers.load_state_dict(state_dict["ip_adapter"])
 
     @torch.inference_mode()
@@ -143,14 +157,16 @@ class IPAdapter:
                 pil_image = [pil_image]
             clip_image = self.clip_image_processor(images=pil_image, return_tensors="pt").pixel_values
             clip_image_embeds = self.image_encoder(clip_image.to(self.device, dtype=torch.float16)).image_embeds
+            print(clip_image_embeds.shape)
         else:
             clip_image_embeds = clip_image_embeds.to(self.device, dtype=torch.float16)
+        
         image_prompt_embeds = self.image_proj_model(clip_image_embeds)
         uncond_image_prompt_embeds = self.image_proj_model(torch.zeros_like(clip_image_embeds))
         return image_prompt_embeds, uncond_image_prompt_embeds
 
     def set_scale(self, scale):
-        for attn_processor in self.pipe.unet.attn_processors.values():
+        for attn_processor in self.unet.attn_processors.values():
             if isinstance(attn_processor, IPAttnProcessor):
                 attn_processor.scale = scale
 
@@ -162,9 +178,10 @@ class IPAdapter:
         negative_prompt=None,
         scale=1.0,
         num_samples=4,
-        seed=None,
-        guidance_scale=7.5,
+        seed=42,
+        guidance_scale=3.0,
         num_inference_steps=30,
+        validation_prompt=None,
         **kwargs,
     ):
         self.set_scale(scale)
@@ -212,6 +229,7 @@ class IPAdapter:
             guidance_scale=guidance_scale,
             num_inference_steps=num_inference_steps,
             generator=generator,
+            validation_prompt = validation_prompt,
             **kwargs,
         ).images
 
@@ -230,6 +248,7 @@ class IPAdapterXL(IPAdapter):
         num_samples=4,
         seed=None,
         num_inference_steps=30,
+        validation_image = None, 
         **kwargs,
     ):
         self.set_scale(scale)
@@ -277,6 +296,7 @@ class IPAdapterXL(IPAdapter):
             negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
             num_inference_steps=num_inference_steps,
             generator=self.generator,
+            image=validation_image,
             **kwargs,
         ).images
 
@@ -300,7 +320,7 @@ class IPAdapterPlus(IPAdapter):
         return image_proj_model
 
     @torch.inference_mode()
-    def get_image_embeds(self, pil_image=None, clip_image_embeds=None):
+    def get_image_embeds(self, pil_image=None, clip_image_embeds=1024):
         if isinstance(pil_image, Image.Image):
             pil_image = [pil_image]
         clip_image = self.clip_image_processor(images=pil_image, return_tensors="pt").pixel_values

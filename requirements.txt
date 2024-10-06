@@ -9,3 +9,5 @@ peft
 colored
 torch
 torchvision
+optimum
+optimum[exporters]
