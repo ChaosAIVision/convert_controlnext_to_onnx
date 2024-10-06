@@ -14,6 +14,7 @@ from torch.onnx import export
 from typing import Union, Optional, Tuple
 from diffusers import AutoPipelineForText2Image
 from repo_ipadapter.ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlus, IPAdapterFaceID
+from repo_ipadapter.ip_adapter.ip_adapter import IPAdapter
 from repo_controlnext.controlnext_test.models.controlnet import ControlNetModel
 from repo_controlnext.controlnext_test.models.pipeline_controlnext import StableDiffusionControlNextPipeline
 from safetensors.torch import load_file
@@ -230,7 +231,7 @@ def convert_models(
         
 
     # Load ip_adapter 
-    pipeline_ip = IPAdapterFaceID(pipeline,image_encoder_path = image_model_path, ip_ckpt = ip_adapter_weight_path, device = 'cuda' )
+    pipeline_ip = IPAdapter(pipeline,image_encoder_path = image_model_path, ip_ckpt = ip_adapter_weight_path, device = 'cuda' )
 
     # if lora_weight_path is not None:
     #     pipeline.load_lora_weights(lora_weight_path)
