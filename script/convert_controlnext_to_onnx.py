@@ -390,15 +390,15 @@ def convert_models(
             convert_attribute=False,
         )
     
-if __name__ == "_main_":
-    convert_models(
-        controlnext_path='/home/tiennv/chaos/weight_folder/controlnet.safetensors',
-        load_weight_increasement='/home/tiennv/chaos/weight_folder/unet.safetensors',
-        image_model_path='/home/tiennv/chaos/weight_folder/clip_model',
-        ip_adapter_weight_path='/home/tiennv/chaos/weight_folder/ip-adapter_sd15.bin',
-        output_path='/home/tiennv/chaos/trash',
-        opset=16,
-        # fp16=True,
-        lora_weight_path='/home/chaos/Documents/Chaos_project/model/sd_model/ip-adapter-faceid-plus_sd15_lora.safetensors',
-        use_safetensors=True,
-        unet_name= '/home/tiennv/chaos/weight_folder/unet')
+# if __name__ == "_main_":
+convert_models(
+    controlnext_path='/home/tiennv/chaos/weight_folder/controlnet.safetensors',
+    load_weight_increasement='/home/tiennv/chaos/weight_folder/unet.safetensors',
+    image_model_path='/home/tiennv/chaos/weight_folder/clip_model',
+    ip_adapter_weight_path='/home/tiennv/chaos/weight_folder/ip-adapter_sd15.bin',
+    output_path='/home/tiennv/chaos/trash',
+    opset=16,
+    # fp16=True,
+    lora_weight_path='/home/chaos/Documents/Chaos_project/model/sd_model/ip-adapter-faceid-plus_sd15_lora.safetensors',
+    use_safetensors=True,
+    unet_name= '/home/tiennv/chaos/weight_folder/unet')
