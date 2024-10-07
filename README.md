@@ -17,11 +17,11 @@ pip install -r requirements.txt
 Convert VAE, Text Encoder model. 
 
 ```text
-python -m sscript.convert_clip_model_vision_to_onnx```
+python -m sscript.convert_clip_model_vision_to_onnx 
+```
 
-Convert Unet, Controlnext, Proj model
 
-1. Change script
+## ***Convert Unet, Controlnext, Proj model ***
 
 '''python
    convert_models(
@@ -35,4 +35,4 @@ Convert Unet, Controlnext, Proj model
         lora_weight_path='ip-adapter-faceid-plus_sd15_lora.safetensors',
         use_safetensors=True,
         unet_folder_path= 'SG161222/Realistic_Vision_V5.1_noVAE')        # name of stable diffusion model to convert unet to onnx        
-        '''
+       '''
