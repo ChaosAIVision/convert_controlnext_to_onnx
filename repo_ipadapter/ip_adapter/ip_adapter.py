@@ -79,7 +79,7 @@ class IPAdapter:
         self.set_ip_adapter()
 
         # load image encoder
-        self.image_encoder = CLIPVisionModelWithProjection.from_pretrained('/home/tiennv/chaos/weight_folder/clip_model').to(
+        self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(image_encoder_path).to(
             self.device, dtype=torch.float16
         )
         self.clip_image_processor = CLIPImageProcessor()
