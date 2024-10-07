@@ -43,7 +43,7 @@ convert_models(
 ### Convert VAE Text Encoder 
 ```text
 
-optimum-cli export onnx -m SG161222/Realistic_Vision_V5.1_noVAE --task text-encoding f'onnx_cnext'
+optimum-cli export onnx -m SG161222/Realistic_Vision_V5.1_noVAE --task text-encoding your_folder_path
 ```
 
 ## 🚀 **Inferences**
