@@ -87,7 +87,8 @@ python run_controlnext.py \
 
 
 3. Inferences
-```bash script.sh
+```bash 
+bash script.sh
 
 ```
 
