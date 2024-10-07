@@ -415,8 +415,8 @@ class StableDiffusionControlNextONNXPipeline():
             scale = torch.tensor([2.25])
 
             noise_pred = self.unet.run(None, {'sample': latent_model_input.cpu().numpy(),
-                        'timesteps': t.unsqueeze(0).cpu().numpy().astype(np.float32),
-                        'encoder_hidden_states': prompt_embeds.cpu().numpy(),
+                        'timestep': t.unsqueeze(0).cpu().numpy().astype(np.float32),
+                        'encoder_hidden_state': prompt_embeds.cpu().numpy(),
                         'mid_block_additional_residual': sample.astype(np.float32),
                         'mid_block_additional_residual_scale': scale.cpu().numpy()})
                         

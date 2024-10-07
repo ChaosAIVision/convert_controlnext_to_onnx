@@ -311,7 +311,7 @@ def convert_models(
     )
 
 # #     #convert proj model to onnx
-    device = 'cuda'
+    device = 'cpu'
     proj = (ip_model.image_proj_model)
 
     image_proj_model = ImageProjModel(proj)
@@ -352,7 +352,8 @@ def convert_models(
             location="weights.pb",
             convert_attribute=False,
         )
-    
+    device = 'cpu'
+
     #convert controlnext
     controlnext_path = output_path / "controlnext" / "model.onnx"
 
