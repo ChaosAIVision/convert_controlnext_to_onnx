@@ -39,7 +39,7 @@ convert_models(
     unet_folder_path='SG161222/Realistic_Vision_V5.1_noVAE'  # name of stable diffusion model to convert unet to onnx      
 )
 ```
-2. command in cli
+2. Command in cli
 
 ```text
 python -m script.convert_controlnext_to_onnx.py
