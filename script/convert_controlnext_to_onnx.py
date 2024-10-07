@@ -187,9 +187,8 @@ def load_safetensors(model, safetensors_path, strict=True, load_weight_increasem
 
 @torch.no_grad()
 def convert_models(
-    model_path:str,
     controlnext_path:str,
-    unet_folder_path:str, 
+    unet_name:str, 
     load_weight_increasement:str,
     image_model_path:str,
     ip_adapter_weight_path:str,
@@ -217,11 +216,11 @@ def convert_models(
 
     #init unet 
     unet =UNet2DConditionModel.from_pretrained(
-        "SG161222/Realistic_Vision_V5.1_noVAE", 
+        f"{unet_name}", 
         subfolder="unet", 
     )
 
-    load_safetensors(unet, '/home/tiennv/chaos/weight_folder/unet.safetensors', strict=False, load_weight_increasement=False)
+    load_safetensors(unet, f'{load_weight_increasement}', strict=False, load_weight_increasement=False)
 
 
 
@@ -393,7 +392,6 @@ def convert_models(
     
 if __name__ == "_main_":
     convert_models(
-        model_path= '/home/tiennv/chaos/weight_folder/Realistic_Vision_V5.1.safetensors',
         controlnext_path='/home/tiennv/chaos/weight_folder/controlnet.safetensors',
         load_weight_increasement='/home/tiennv/chaos/weight_folder/unet.safetensors',
         image_model_path='/home/tiennv/chaos/weight_folder/clip_model',
@@ -403,4 +401,4 @@ if __name__ == "_main_":
         # fp16=True,
         lora_weight_path='/home/chaos/Documents/Chaos_project/model/sd_model/ip-adapter-faceid-plus_sd15_lora.safetensors',
         use_safetensors=True,
-        unet_folder_path= '/home/tiennv/chaos/weight_folder/unet')
+        unet_name= '/home/tiennv/chaos/weight_folder/unet')
