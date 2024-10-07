@@ -17,7 +17,7 @@ pip install -r requirements.txt
 ### Convert CLIPVisionModelWithProjection model. 
 
 ```text
-python -m sscript.convert_clip_model_vision_to_onnx 
+python -m script.convert_clip_model_vision_to_onnx 
 ```
 
 
@@ -38,6 +38,11 @@ convert_models(
     use_safetensors=True,
     unet_folder_path='SG161222/Realistic_Vision_V5.1_noVAE'  # name of stable diffusion model to convert unet to onnx      
 )
+```
+2. command in cli
+
+```text
+python -m script.convert_controlnext_to_onnx.py
 ```
 
 ### Convert VAE Text Encoder 
