@@ -14,7 +14,7 @@ pip install -r requirements.txt
 ```
 
 ## 🚀 **Run code convert **
-###Convert VAE, Text Encoder model. 
+### Convert CLIPVisionModelWithProjection model. 
 
 ```text
 python -m sscript.convert_clip_model_vision_to_onnx 
