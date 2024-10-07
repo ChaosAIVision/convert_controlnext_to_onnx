@@ -21,7 +21,7 @@ python -m sscript.convert_clip_model_vision_to_onnx
 ```
 
 
-## ***Convert Unet, Controlnext, Proj model ***
+### Convert Unet, Controlnext, Proj model 
 
 1. Change script
 
