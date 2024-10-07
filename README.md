@@ -42,7 +42,7 @@ convert_models(
 2. Command in CLI
 
 ```text
-python -m script.convert_controlnext_to_onnx.py
+python -m script.convert_controlnext_to_onnx
 ```
 
 ### Convert VAE Text Encoder 
