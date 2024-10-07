@@ -25,7 +25,7 @@ python -m sscript.convert_clip_model_vision_to_onnx
 
 1. Change script
 
-'''
+'''text
    convert_models(
         controlnext_path='controlnet.safetensors'   # name controlnext model
         load_weight_increasement='unet.safetensors',  # load weight additional unet to connect IP adapter with unet
