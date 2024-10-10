@@ -1278,13 +1278,53 @@ class StableDiffusionControlNextInpaintPipeline(
         else:
             assert False
 
+          # 4.1 Preprocess mask and image - resizes image and mask w.r.t height and width
+        original_image_temp = original_image
+        init_image = self.image_processor.preprocess(
+            original_image, height=height, width=width, crops_coords=crops_coords, resize_mode=resize_mode
+        )
+        init_image = init_image.to(dtype=torch.float32)
+
+        mask = self.mask_processor.preprocess(
+            mask_image, height=height, width=width, resize_mode=resize_mode, crops_coords=crops_coords
+        )
+
+        masked_image = init_image * (mask < 0.5)
+        _, _, height, width = init_image.shape
+
+        # # 5. Prepare timesteps
+        # timesteps, num_inference_steps = retrieve_timesteps(self.scheduler, num_inference_steps, device, timesteps)
+        # self._num_timesteps = len(timesteps)
+
+
         # 5. Prepare timesteps
-        timesteps, num_inference_steps = retrieve_timesteps(self.scheduler, num_inference_steps, device, timesteps)
+        self.scheduler.set_timesteps(num_inference_steps, device=device)
+        timesteps, num_inference_steps = self.get_timesteps(
+            num_inference_steps=num_inference_steps, strength=strength, device=device
+        )
+        # at which timestep to set the initial noise (n.b. 50% if strength is 0.5)
+        latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)
+        # create a boolean to check if the strength is set to 1. if so then initialise the latents with pure noise
+        is_strength_max = strength == 1.0
         self._num_timesteps = len(timesteps)
 
-        # 6. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
-        latents = self.prepare_latents(
+        # # 6. Prepare latent variables
+        # num_channels_latents = self.unet.config.in_channels
+        # latents = self.prepare_latents(
+        #     batch_size * num_images_per_prompt,
+        #     num_channels_latents,
+        #     height,
+        #     width,
+        #     prompt_embeds.dtype,
+        #     device,
+        #     generator,
+        #     latents,
+        # )
+         # 6. Prepare latent variables
+        num_channels_latents = self.vae.config.latent_channels
+        num_channels_unet = self.unet.config.in_channels
+        return_image_latents = num_channels_unet == 4
+        latents_outputs = self.prepare_latents(
             batch_size * num_images_per_prompt,
             num_channels_latents,
             height,
@@ -1293,6 +1333,29 @@ class StableDiffusionControlNextInpaintPipeline(
             device,
             generator,
             latents,
+            image=init_image,
+            timestep=latent_timestep,
+            is_strength_max=is_strength_max,
+            return_noise=True,
+            return_image_latents=return_image_latents,
+        )
+
+        if return_image_latents:
+            latents, noise, image_latents = latents_outputs
+        else:
+            latents, noise = latents_outputs
+
+        # 7. Prepare mask latent variables
+        mask, masked_image_latents = self.prepare_mask_latents(
+            mask,
+            masked_image,
+            batch_size * num_images_per_prompt,
+            height,
+            width,
+            prompt_embeds.dtype,
+            device,
+            generator,
+            self.do_classifier_free_guidance,
         )
 
         # 6.5 Optionally get Guidance Scale Embedding
