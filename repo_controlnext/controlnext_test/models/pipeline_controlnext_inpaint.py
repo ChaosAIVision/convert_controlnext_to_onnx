@@ -26,8 +26,8 @@ from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.pipelines.stable_diffusion.pipeline_output import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
-from ..models.controlnet import ControlNetModel
-from ..models.unet_conditional import UNet2DConditionModel
+from models.controlnet import ControlNetModel
+from models.unet_conditional import UNet2DConditionModel
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -223,6 +223,8 @@ class StableDiffusionControlNextInpaintPipeline(
             safety_checker=safety_checker,
             feature_extractor=feature_extractor,
             image_encoder=image_encoder,
+            ip_adapter_proj= ip_adapter_proj
+
             
 
         )
@@ -233,7 +235,19 @@ class StableDiffusionControlNextInpaintPipeline(
         )
         self.ip_adapter_proj = ip_adapter_proj
         self.register_to_config(requires_safety_checker=requires_safety_checker)
+        self.mask_processor = VaeImageProcessor(
+            vae_scale_factor=self.vae_scale_factor, do_normalize=False, do_binarize=True, do_convert_grayscale=True
+        )
+    def get_timesteps(self, num_inference_steps, strength, device):
+        # get the original timestep using init_timestep
+        init_timestep = min(int(num_inference_steps * strength), num_inference_steps)
 
+        t_start = max(num_inference_steps - init_timestep, 0)
+        timesteps = self.scheduler.timesteps[t_start * self.scheduler.order :]
+        if hasattr(self.scheduler, "set_begin_index"):
+            self.scheduler.set_begin_index(t_start * self.scheduler.order)
+
+        return timesteps, num_inference_steps - t_start
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.enable_vae_slicing
     def enable_vae_slicing(self):
         r"""
@@ -508,7 +522,7 @@ class StableDiffusionControlNextInpaintPipeline(
     #         return image_embeds, uncond_image_embeds
         
     def encoder_ipadapter(self, ip_adapter_image, num_images_per_prompt):
-        clip_image = self.feature_extractor(images=ip_adapter_image, return_tensors="pt")
+        clip_image = self.feature_extractor(images=ip_adapter_image, return_tensors="pt").to('cuda')
         clip_image_embeds= self.image_encoder(**clip_image)
         image_embeds = self.ip_adapter_proj(clip_image_embeds[0])
         image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
@@ -789,6 +803,20 @@ class StableDiffusionControlNextInpaintPipeline(
             image = torch.cat([image] * 2)
 
         return image
+    
+    def _encode_vae_image(self, image: torch.Tensor, generator: torch.Generator):
+        if isinstance(generator, list):
+            image_latents = [
+                retrieve_latents(self.vae.encode(image[i : i + 1]), generator=generator[i])
+                for i in range(image.shape[0])
+            ]
+            image_latents = torch.cat(image_latents, dim=0)
+        else:
+            image_latents = retrieve_latents(self.vae.encode(image), generator=generator)
+
+        image_latents = self.vae.config.scaling_factor * image_latents
+
+        return image_latents
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
     def prepare_latents(self,
@@ -1130,7 +1158,6 @@ class StableDiffusionControlNextInpaintPipeline(
 
         callback = kwargs.pop("callback", None)
         callback_steps = kwargs.pop("callback_steps", None)
-
         if callback is not None:
             deprecate(
                 "callback",
@@ -1158,24 +1185,23 @@ class StableDiffusionControlNextInpaintPipeline(
                 mult * [control_guidance_end],
             )
 
- 
-        self.check_inputs(
-                self,
-                prompt,
-                image,
-                original_image,
-                mask_image,
-                callback_steps,
-                output_type,
-                negative_prompt=None,
-                prompt_embeds=None,
-                negative_prompt_embeds=None,
-                controlnet_conditioning_scale=1.0,
-                control_guidance_start=0.0,
-                control_guidance_end=1.0,
-                callback_on_step_end_tensor_inputs=None,
-                padding_mask_crop = None
-            )
+        # self.check_inputs(
+        #         self,
+        #         prompt,
+        #         image,
+        #         original_image,
+        #         mask_image,
+        #         callback_steps,
+        #         output_type,
+        #         # negative_prompt=None,
+        #         prompt_embeds=None,
+        #         negative_prompt_embeds=None,
+        #         controlnet_conditioning_scale=1.0,
+        #         control_guidance_start=0.0,
+        #         control_guidance_end=1.0,
+        #         callback_on_step_end_tensor_inputs=None,
+        #         padding_mask_crop = None
+        #     )
       
 
         self._guidance_scale = guidance_scale
@@ -1201,7 +1227,8 @@ class StableDiffusionControlNextInpaintPipeline(
 
     
 
-        device = self._execution_device
+        # device = self._execution_device
+        device = 'cuda'
 
         if isinstance(controlnet, MultiControlNetModel) and isinstance(controlnet_conditioning_scale, float):
             controlnet_conditioning_scale = [controlnet_conditioning_scale] * len(controlnet.nets)
@@ -1231,15 +1258,22 @@ class StableDiffusionControlNextInpaintPipeline(
         # For classifier free guidance, we need to do two forward passes.
         # Here we concatenate the unconditional and text embeddings into a single batch
         # to avoid doing two forward passes
-        if self.do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
 
         if ip_adapter_image is not None:
             image_embeds, negative_image_embeds = self.encoder_ipadapter(
-                ip_adapter_image, device, num_images_per_prompt
+                ip_adapter_image, num_images_per_prompt
             )
             if self.do_classifier_free_guidance:
                 image_embeds = torch.cat([negative_image_embeds, image_embeds])
+                #concat promt_embeds vs IP adapter to bias IP adapter
+                prompt_embeds = torch.cat([negative_prompt_embeds, negative_image_embeds], dim=1)
+                negative_prompt_embeds =  torch.cat([negative_prompt_embeds, negative_image_embeds], dim=1)
+
+                
+        #Create  hidden_state        
+        if self.do_classifier_free_guidance:
+            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
+
 
         # 4. Prepare image
         if isinstance(controlnet, ControlNetModel):
@@ -1333,7 +1367,7 @@ class StableDiffusionControlNextInpaintPipeline(
             device,
             generator,
             latents,
-            image=init_image,
+            original_image=init_image,
             timestep=latent_timestep,
             is_strength_max=is_strength_max,
             return_noise=True,
@@ -1371,6 +1405,10 @@ class StableDiffusionControlNextInpaintPipeline(
 
         # 7.1 Add image embeds for IP-Adapter
         added_cond_kwargs = {"image_embeds": image_embeds} if ip_adapter_image is not None else None
+
+        #concateternate IpAdapter vs text promt
+
+        
 
         # 7.2 Create tensor stating which controlnets to keep
         controlnet_keep = []
@@ -1456,6 +1494,8 @@ class StableDiffusionControlNextInpaintPipeline(
 
 
                 # predict the noise residual
+                latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
+
                 noise_pred = self.unet(
                     latent_model_input,
                     t,
@@ -1475,6 +1515,21 @@ class StableDiffusionControlNextInpaintPipeline(
 
                 # compute the previous noisy sample x_t -> x_t-1
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+
+                if num_channels_unet == 4:
+                    init_latents_proper = image_latents
+                    if self.do_classifier_free_guidance:
+                        init_mask, _ = mask.chunk(2)
+                    else:
+                        init_mask = mask
+
+                    if i < len(timesteps) - 1:
+                        noise_timestep = timesteps[i + 1]
+                        init_latents_proper = self.scheduler.add_noise(
+                            init_latents_proper, noise, torch.tensor([noise_timestep])
+                        )
+
+                    latents = (1 - init_mask) * init_latents_proper + init_mask * latents
 
                 if callback_on_step_end is not None:
                     callback_kwargs = {}

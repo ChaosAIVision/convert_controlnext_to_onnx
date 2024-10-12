@@ -361,8 +361,8 @@ class StableDiffusionControlNextONNXPipeline():
             image_prompt_embeds = image_prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
             uncond_image_prompt_embeds = uncond_image_prompt_embeds.repeat(1, num_images_per_prompt, 1)
             uncond_image_prompt_embeds = uncond_image_prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
-            prompt_embeds = torch.cat([torch.zeros_like(prompt_embeds), image_prompt_embeds], dim=1)
-            negative_prompt_embeds = torch.cat([torch.zeros_like(negative_prompt_embeds), uncond_image_prompt_embeds], dim=1)
+            prompt_embeds = torch.cat([prompt_embeds, image_prompt_embeds], dim=1)
+            negative_prompt_embeds = torch.cat([negative_prompt_embeds, uncond_image_prompt_embeds], dim=1)
         
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
