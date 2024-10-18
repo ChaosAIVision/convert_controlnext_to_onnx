@@ -69,10 +69,10 @@ class StableDiffusionDataset(Dataset):
             mask_values = self.mask_tranfomrs(mask_values)
         else:
             mask_values = Image.open(item['mask_values']).convert("RGB")
-            mask_values = self.image_transforms(mask_values,return_tensors = 'pt').pixel_values
+            mask_values = self.image_transforms(mask_values)
 
         ipadapter_images = Image.open(item['ipadapter_images']).convert("RGB")
-        ipadapter_images = self.clip_image_embedding(ipadapter_images)
+        ipadapter_images = (self.clip_image_embedding(ipadapter_images,return_tensors = 'pt').pixel_values)[0]
 
         text_prompt = item['text_prompt']
         input_ids = self.tokenize_captions([text_prompt])

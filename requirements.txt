@@ -2,7 +2,7 @@ transformers
 onnx==1.15.0
 onnxruntime==1.17.0
 onnxruntime-gpu==1.17.0
-diffusers==0.28.0
+diffusers
 onnx_graphsurgeon
 polygraphy
 peft
@@ -14,4 +14,6 @@ optimum[exporters]
 ip_adapter
 accelerate
 datasets
-
+opencv-python
+einops
+numpy==1.26
