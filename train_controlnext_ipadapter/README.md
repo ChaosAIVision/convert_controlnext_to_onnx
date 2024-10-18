@@ -13,7 +13,7 @@ cd convert_controlnext_to_onnx
 pip install -r requirements.txt
 ```
 
-## Download weights % dataset for training 
+## Download weights & dataset for training 
 
 ```text
 run code in /convert_controlnext_to_onnx/train_controlnext_ipadapter/get_weight_training.ipynb
