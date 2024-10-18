@@ -177,7 +177,7 @@ def convert_models(
                     verbose=True,
                     use_external_data_format=True, 
                 )
-        clip_opt_graph =  onnx.load(clip_optimize)
+        clip_opt_graph =  onnx.load(clip_path)
         onnx.save_model(
             clip_opt_graph,
             clip_optimize,  
