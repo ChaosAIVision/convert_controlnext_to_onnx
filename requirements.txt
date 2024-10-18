@@ -11,3 +11,7 @@ torch
 torchvision
 optimum
 optimum[exporters]
+ip_adapter
+accelerate
+datasets
+
