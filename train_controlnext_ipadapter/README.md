@@ -13,7 +13,7 @@ cd convert_controlnext_to_onnx
 pip install -r requirements.txt
 ```
 
-## Download weights & dataset for training 
+## 📝 ** Download weights & dataset for training **
 
 ```text
 run code in /convert_controlnext_to_onnx/train_controlnext_ipadapter/get_weight_training.ipynb
@@ -51,7 +51,7 @@ python controlnext_training/make_data.py
 ```
 
 
-3. change script training in /convert_controlnext_to_onnx/train_controlnext_ipadapter/controlnext_training/scripts.sh
+3. Change script training in /convert_controlnext_to_onnx/train_controlnext_ipadapter/controlnext_training/scripts.sh
 
 ```script
 CUDA_VISIBLE_DEVICES=0,1 accelerate launch --main_process_port 12345 train_controlnext.py \
