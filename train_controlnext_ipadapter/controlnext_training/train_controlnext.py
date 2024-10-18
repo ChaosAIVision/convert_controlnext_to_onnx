@@ -1389,6 +1389,9 @@ def main(args):
                         torch.save(save_controlnext.cpu().state_dict(), controlnext_path)
                         del save_controlnext
 
+                        device = 'cuda'
+                        controlnext = controlnext.to(device)
+
                         ip_adapter_path =os.path.join(save_path,'ip_adapter.bin')
                         modulist = get_adapter_modules_unet(unet)
                         combine_weight = {
@@ -1396,6 +1399,8 @@ def main(args):
                              'ip_adapter':modulist
                         }
                         torch.save(combine_weight,ip_adapter_path )
+                        proj_model =proj_model.to(device)
+                        modulist = [mod.to(device) for mod in modulist]
 
                         if not args.save_load_weights_increaments:
                             save_unet = {}
@@ -1418,6 +1423,7 @@ def main(args):
                             torch.save(save_unet, unet_path)
                             del save_unet
                             del unet_state_dict
+                        unet = unet.to(device)
                         
 
                     # if args.validation_prompt is not None and global_step % args.validation_steps == 0:
