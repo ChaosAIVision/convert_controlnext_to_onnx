@@ -713,7 +713,6 @@ def parse_args(input_args=None):
         args = parser.parse_args(input_args)
     else:
         args = parser.parse_args()
-
     if args.dataset_name is None and args.train_data_dir is None:
         raise ValueError("Specify either `--dataset_name` or `--train_data_dir`")
 
@@ -945,8 +944,10 @@ def main(args):
         )
 
     logging_dir = Path(args.output_dir, args.logging_dir)
+   
 
     accelerator_project_config = ProjectConfiguration(project_dir=args.output_dir, logging_dir=logging_dir)
+
 
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
@@ -1091,13 +1092,14 @@ def main(args):
     else:
         optimizer_class = torch.optim.AdamW
 
-    # Optimizer creation
-    params_to_optimize = [{
+    # # Optimizer creation
+    params_to_optimize = [
+        {
         "params": controlnext.parameters(),
-        "lr": args.learning_rate * 10
+        "lr": args.learning_rate * 1
     },
     {'params': proj_model.parameters(),
-     "lr":args.learning_rate * 10}
+     "lr":args.learning_rate * 1}
     ]
 
     pretrained_trainable_params = {}
@@ -1109,9 +1111,14 @@ def main(args):
             params_to_optimize.append({
                 "params": para
             })
-            pretrained_trainable_params[name] = para.detach().cpu()
+            # pretrained_trainable_params[name] = para.detach().cpu()
         else:
             para.requires_grad = False
+
+    # print(params_to_optimize)
+
+    
+
 
     optimizer = optimizer_class(
         params_to_optimize,
@@ -1300,6 +1307,8 @@ def main(args):
                     # encoder_hidden_states = text_encoder(batch["input_ids"], return_dict=False)[0]
                     controlnext_image = batch["conditioning_pixel_values"].to(dtype=weight_dtype)
                     controlnext_output = controlnext(controlnext_image, timesteps)
+                    # print('controlnext:', controlnext_output)
+
 
                 else:
 
@@ -1319,14 +1328,14 @@ def main(args):
 
 
                 ip_adapter_condition =  batch['ipadapter_images'].to(dtype=weight_dtype)
+                # print('ip_adpater:',ip_adapter_condition)
 
 
                 # ip_adapter_embedding = image_encoder_processor(pil_image, return_tensors = 'pt').pixel_values
                 clip_embedding = image_encoder(ip_adapter_condition.to('cuda'),return_dict = False)[0]
                 encoder_hidden_states = proj_model(clip_embedding)
-
-                
-
+                # print(encoder_hidden_states)
+              
                 # Predict the noise residual
                 model_pred = unet(
                     noisy_latents,
@@ -1336,6 +1345,9 @@ def main(args):
                     mid_block_additional_residual_scale= controlnext_output['scale'],
                     return_dict=False,
                 )[0]
+
+                # print('noise,' ,model_pred)
+
 
                 # Get the target for loss depending on the prediction type
                 if noise_scheduler.config.prediction_type == "epsilon":
@@ -1347,9 +1359,23 @@ def main(args):
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
                 accelerator.backward(loss)
+
+                import torch.nn.utils as nn_utils
+
+                # Thêm gradient clipping trước khi update tham số
+                clip_value = 1.0  # giá trị clip giới hạn gradient
+
+                for name, para in unet.named_parameters():
+                    if para.requires_grad and para.grad is not None:
+                        nn_utils.clip_grad_norm_(para, clip_value)
+
+            
+                params_to_clip = []
+                for param_group in params_to_optimize:
+                    params_to_clip += param_group["params"]
                 if accelerator.sync_gradients:
-                    params_to_clip = controlnext.parameters()
-                    # accelerator.clip_grad_norm_(params_to_optimize, args.max_grad_norm)
+                    # params_to_clip = proj_model.parameters()
+                    accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=args.set_grads_to_none)
@@ -1389,9 +1415,6 @@ def main(args):
                         torch.save(save_controlnext.cpu().state_dict(), controlnext_path)
                         del save_controlnext
 
-                        device = 'cuda'
-                        controlnext = controlnext.to(device)
-
                         ip_adapter_path =os.path.join(save_path,'ip_adapter.bin')
                         modulist = get_adapter_modules_unet(unet)
                         combine_weight = {
@@ -1399,8 +1422,6 @@ def main(args):
                              'ip_adapter':modulist
                         }
                         torch.save(combine_weight,ip_adapter_path )
-                        proj_model =proj_model.to(device)
-                        modulist = [mod.to(device) for mod in modulist]
 
                         if not args.save_load_weights_increaments:
                             save_unet = {}
@@ -1423,7 +1444,6 @@ def main(args):
                             torch.save(save_unet, unet_path)
                             del save_unet
                             del unet_state_dict
-                        unet = unet.to(device)
                         
 
                     # if args.validation_prompt is not None and global_step % args.validation_steps == 0:
