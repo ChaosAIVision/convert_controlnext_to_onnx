@@ -2,7 +2,6 @@ import argparse
 import os
 import shutil
 from pathlib import Path
-from PIL import Image
 import onnx
 import onnx_graphsurgeon as gs
 import torch
@@ -12,14 +11,7 @@ from polygraphy.backend.onnx.loader import fold_constants
 from torch.onnx import export
 
 from typing import Union, Optional, Tuple
-from diffusers import AutoPipelineForText2Image
-from repo_ipadapter.ip_adapter.ip_adapter_faceid import IPAdapterFaceIDPlus
-from repo_controlnext.controlnext_test.models.controlnet import ControlNetModel
-from repo_controlnext.controlnext_test.models.pipeline_controlnext import StableDiffusionControlNextPipeline
-from safetensors.torch import load_file
-from repo_diffusers.src.diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
-from transformers import CLIPVisionModelWithProjection
-from transformers import AutoProcessor, CLIPVisionModelWithProjection, CLIPImageProcessor, CLIPTokenizer
+from diffusers import DiffusionPipeline
 
 
 
@@ -79,16 +71,16 @@ def optimize(onnx_graph, name, verbose):
     opt.info(name + ": finished")
     return onnx_opt_graph
 
-
-class CLIPVisionProj(torch.nn.Module):
-    def __init__(self, clip_model) -> None:
+class TextEncoder2(torch.nn.Module):
+    def __init__(self, text_encoder_2_model):
         super().__init__()
-        self.clip_model = clip_model
+        self.text_encoder_2_model = text_encoder_2_model
 
-    def forward(self, image_embedding):
-        result = self.clip_model(image_embedding,return_dict = False)
-        return result[0]
-    
+    def forward(self,input_ids):
+        out = self.text_encoder_2_model(input_ids, output_hidden_states = True)
+        return out.text_embeds, out.last_hidden_state, out.hidden_states[32]
+
+
 def onnx_export(
     model,
     model_args: tuple,
@@ -129,70 +121,61 @@ def onnx_export(
                 verbose=verbose,  # Thêm verbose ở đây
             )
 
-def load_safetensors(model, safetensors_path, strict=True, load_weight_increasement=False):
-    if not load_weight_increasement:
-        if safetensors_path.endswith('.safetensors'):
-            state_dict = load_file(safetensors_path)
-        else:
-            state_dict = torch.load(safetensors_path)
-        model.load_state_dict(state_dict, strict=strict)
-    else:
-        if safetensors_path.endswith('.safetensors'):
-            state_dict = load_file(safetensors_path)
-        else:
-            state_dict = torch.load(safetensors_path)
-        pretrained_state_dict = model.state_dict()
-        for k in state_dict.keys():
-            state_dict[k] = state_dict[k] + pretrained_state_dict[k]
-        model.load_state_dict(state_dict, strict=False)
+
 
 def convert_models(
-    image_model_path:str,
-    image_path:str, 
+    stable_diffusion_name_or_path:str, 
     output_path:str,
     opset:int=16,
     fp16: bool = False,
 ):
         dtype =  torch.float32
         device = 'cpu'
-        image = Image.open(image_path)
-        image_encoder_processor = CLIPImageProcessor()
-        image_embedding = image_encoder_processor(image, return_tensors="pt").pixel_values
-        clip_model= CLIPVisionModelWithProjection.from_pretrained("h94/IP-Adapter", subfolder = 'models/image_encoder')
-        image_encoder = CLIPVisionProj(clip_model).to(device=device)
+        pipe=  DiffusionPipeline.from_pretrained(stable_diffusion_name_or_path)
+        text_encoder_model = TextEncoder2(pipe.text_encoder_2)
         output_path = Path(output_path)
 
-        clip_path = output_path / "clip_vision_proj" / "model.onnx"
-        clip_optimize = output_path  / 'optimize' / 'model.onnx'
+        text_encoder_2 = output_path / "text_encoder_2" / "model.onnx"
+        text_encoder_2_optimize = output_path / 'optimize' / 'model.onnx'
         #create folder for optimize clip
         os.makedirs(output_path / 'optimize', exist_ok= True)
-        onnx_export(image_encoder,
-                    model_args= (image_embedding).to(dtype = torch.float32, device = device),
-                    output_path =clip_path,
-                    ordered_input_names= ['image_embedding'],
-                    output_names=["image_encoder"],
-                    dynamic_axes={'image_embedding': {0: 'Batch_size',1: 'channel', 2: 'height', 3:'weidth'},
-                                 'image_encoder': {0:'Batch_size', 1: 'sequence_length'} },
+
+
+        
+        num_tokens = pipe.text_encoder.config.max_position_embeddings
+        text_hidden_size = pipe.text_encoder.config.hidden_size
+        text_input = pipe.tokenizer(
+                "A sample prompt",
+                padding="max_length",
+                max_length=pipe.tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+        onnx_export(text_encoder_model,
+                    model_args= (text_input.input_ids).to(dtype = torch.long, device = device),
+                    output_path =text_encoder_2,
+                    ordered_input_names= ['input_ids'],
+                    output_names=["text_embeds", 'last_hidden_state','hidden_states_31'],
+                    dynamic_axes={'input_ids': {0: 'Batch_size', 1: 'num_token'},
+                                 'text_embeds': {0:'Batch_size', 1: 'num_token', 2: 'sequence_length'},
+                                  'hidden_states_31': {0:'Batch_size', 1: 'num_token', 2: 'sequence_length'}},
                     opset=opset,
                     verbose=True,
                     use_external_data_format=True, 
                 )
-        clip_opt_graph =  onnx.load(clip_path)
+        text_encoder_2_opt_graph =  onnx.load(text_encoder_2)
         onnx.save_model(
-            clip_opt_graph,
-            clip_optimize,  
+            text_encoder_2_opt_graph,
+            text_encoder_2_optimize,  
             save_as_external_data=True, 
             all_tensors_to_one_file=True,  
             convert_attribute=False,            
             location="weights.pb",
 
         )
-
-if __name__ == "_main_":
-    convert_models(image_model_path= 'trash',
-                    image_path= '/home/tiennv/trang/Identities/2224.jpg',
-                      output_path='/home/tiennv/chaos/output',
-                       opset=16,
+convert_models(stable_diffusion_name_or_path= 'neta-art/neta-xl-2.0',
+                      output_path='/home/tiennv/trang/text_encoder_2',
+                       opset=18,
                      )
 
 # path_image= '/home/tiennv/trang/Identities/2224.jpg'
