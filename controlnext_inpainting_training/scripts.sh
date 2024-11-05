@@ -1,0 +1,24 @@
+CUDA_VISIBLE_DEVICES=1 accelerate launch --config_file '/home/tiennv/chaos/convert_controlnext_to_onnx/train_controlnext_ipadapter/controlnext_training/config.yaml' --main_process_port 12345 train_controlnext.py \
+ --pretrained_model_name_or_path="runwayml/stable-diffusion-v1-5" \
+ --controlnet_model_name_or_path '/home/tiennv/chaos/weight_folder/controlnext_weight/mask/controlnet.safetensors' \
+ --load_unet_not_increaments '/home/tiennv/chaos/weight_folder/controlnext_weight/mask/unet.safetensors' \
+ --output_dir="/home/tiennv/chaos/weight_training" \
+ --resolution=512 \
+ --learning_rate=1e-3 \
+ --checkpoints_total_limit 3 \
+ --checkpointing_steps 500\
+ --num_train_epochs 100 \
+ --train_batch_size=2 \
+ --controlnext_scale 0.35 \
+ --mixed_precision 'bf16' \
+ --unet_model_name_or_path '/home/tiennv/chaos/weight_folder/unet' \
+ --ip_adapter_path '/home/tiennv/chaos/weight_folder/ip-adapter_sd15.bin' \
+ --clip_vt_model_name_or_path '/home/tiennv/chaos/weight_folder/clip_model' \
+  --dataset_path '/home/tiennv/chaos/dataset/data/dataset_deepfurniture.csv' \
+  --path_to_save_data_embedding '/home/tiennv/chaos/dataset/dataset_v2' \
+  --report_to 'wandb' \
+  --save_embeddings_to_npz 'False' \
+  --gradient_accumulation_steps  3 \
+  --resume_from_checkpoint 'latest' \
+  --save_embeddings_to_npz True \
+  --input_type 'not merge' \
